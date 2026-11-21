@@ -1,0 +1,581 @@
+<!-- Chosen Palette: Blue Ocean & Warm Neutral -->
+<!-- Application Structure Plan: Offline-first single-page schedule shift app. Embedded CSS rules replace external CDN dependencies for 100% offline availability on Android WebView. Offline storage with optional online Google Sheets sync. Compact week number column without 'W' prefix or header text. Day headers centered properly over calendar grid columns. -->
+<!-- Visualization & Content Choices: Pure HTML/CSS styled calendar grid with standard week numbers, shift badges, bottom sheets, and date details. NO SVG graphics used. NO Mermaid JS used. -->
+<!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Jadwal Shift Inalum</title>
+    <style>
+        /* 100% OFFLINE STYLES - Dibuat mandiri tanpa CDN eksternal */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background-color: #f3f4f6;
+            color: #1f2937;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        .max-w-md { max-width: 28rem; }
+        .mx-auto { margin-left: auto; margin-right: auto; }
+        .bg-white { background-color: #ffffff; }
+        .min-h-screen { min-height: 100vh; }
+        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        .relative { position: relative; }
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .flex-1 { flex: 1 1 0%; }
+        
+        /* Header & Navigation */
+        header {
+            background: linear-gradient(to right, #1d4ed8, #1e3a8a);
+            color: #ffffff;
+            padding: 1.25rem;
+            border-bottom-left-radius: 1rem;
+            border-bottom-right-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 10;
+        }
+        .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+        .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .text-xs { font-size: 0.75rem; line-height: 1rem; }
+        .text-\[10px\] { font-size: 10px; }
+        .text-\[9px\] { font-size: 9px; }
+        .text-\[8px\] { font-size: 8px; }
+        .text-\[7px\] { font-size: 7px; }
+        .font-bold { font-weight: 700; }
+        .font-semibold { font-weight: 600; }
+        .font-extrabold { font-weight: 800; }
+        
+        /* Buttons & Filter */
+        .btn {
+            border: none;
+            cursor: pointer;
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+        .btn-orange { background-color: #f97316; color: #ffffff; }
+        .btn-orange:active { background-color: #ea580c; }
+        .btn-glass { background-color: rgba(255, 255, 255, 0.2); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3); }
+        .btn-glass:active { background-color: rgba(255, 255, 255, 0.3); }
+        
+        .team-btn {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-align: center;
+            border: 2px solid transparent;
+            min-width: 60px;
+            cursor: pointer;
+        }
+        .team-btn-active { background-color: #ffffff; color: #1e40af; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+        .team-btn-inactive { background-color: rgba(30, 64, 175, 0.5); color: #ffffff; }
+        
+        /* Layout Grid Kalender - Kolom pekan diperkecil minimal */
+        .grid { display: grid; }
+        .calendar-layout { grid-template-columns: 22px repeat(7, minmax(0, 1fr)); }
+        .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .gap-1 { gap: 0.25rem; }
+        .gap-2 { gap: 0.5rem; }
+        .gap-3 { gap: 0.75rem; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Modals & Overlays */
+        .fixed { position: fixed; }
+        .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+        .z-50 { z-index: 50; }
+        .z-100 { z-index: 100; }
+        .hidden { display: none !important; }
+        .modal-bg { background-color: rgba(17, 24, 39, 0.6); backdrop-filter: blur(4px); }
+        
+        /* Warna Shift & Status */
+        .bg-blue-100 { background-color: #dbeafe; }
+        .text-blue-700 { color: #1d4ed8; }
+        .bg-orange-100 { background-color: #ffedd5; }
+        .text-orange-700 { color: #c2410c; }
+        .bg-indigo-100 { background-color: #e0e7ff; }
+        .text-indigo-700 { color: #4338ca; }
+        .bg-red-100 { background-color: #fee2e2; }
+        .text-red-700 { color: #b91c1c; }
+        .text-red-600 { color: #dc2626; }
+        .text-red-500 { color: #ef4444; }
+        .bg-red-50 { background-color: #fef2f2; }
+        .bg-red-500 { background-color: #ef4444; }
+        .bg-blue-500 { background-color: #3b82f6; }
+        .bg-orange-500 { background-color: #f97316; }
+        .bg-indigo-500 { background-color: #6366f1; }
+        .bg-gray-50 { background-color: #f9fafb; }
+        .bg-gray-100 { background-color: #f3f4f6; }
+        .text-gray-400 { color: #9ca3af; }
+        .text-gray-600 { color: #4b5563; }
+        .text-gray-700 { color: #374151; }
+        .text-gray-800 { color: #1f2937; }
+        .border-gray-100 { border-color: #f3f4f6; }
+        .border-gray-200 { border-color: #e5e7eb; }
+        .ring-2-blue { box-shadow: 0 0 0 2px #3b82f6; }
+
+        .spinner {
+            width: 2.5rem;
+            height: 2.5rem;
+            border: 4px solid #2563eb;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative flex flex-col">
+        <!-- HEADER -->
+        <header>
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-xl font-bold" style="letter-spacing: 0.025em;">JADWAL SHIFT</h1>
+                    <p class="text-xs" style="color: #bfdbfe; margin-top: 0.25rem;">Perpetual System (Siklus 12 Hari)</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="goToToday()" class="btn btn-orange">Hari Ini</button>
+                    <button onclick="syncHolidays(true)" class="btn btn-glass">🔄 Sync Libur</button>
+                </div>
+            </div>
+                        
+            <!-- FILTER TIM -->
+            <div class="flex gap-2 no-scrollbar" style="margin-top: 1.5rem; overflow-x: auto; padding-bottom: 0.25rem;">
+                <button onclick="selectTeam('ALL')" id="btn-ALL" class="team-btn team-btn-active">Semua</button>
+                <button onclick="selectTeam('A')" id="btn-A" class="team-btn team-btn-inactive">Tim A</button>
+                <button onclick="selectTeam('B')" id="btn-B" class="team-btn team-btn-inactive">Tim B</button>
+                <button onclick="selectTeam('C')" id="btn-C" class="team-btn team-btn-inactive">Tim C</button>
+                <button onclick="selectTeam('D')" id="btn-D" class="team-btn team-btn-inactive">Tim D</button>
+            </div>
+        </header>
+
+        <!-- NAVIGASI BULAN & TAHUN -->
+        <div class="flex items-center justify-between" style="padding: 1rem 1.5rem; border-bottom: 1px solid #f3f4f6;">
+            <button onclick="prevMonth()" class="btn" style="background-color: #f3f4f6; color: #4b5563; border-radius: 9999px; padding: 0.5rem 0.75rem;">◀</button>
+            <div class="text-center" style="cursor: pointer;" onclick="toggleMonthPicker()">
+                <div class="flex items-center justify-center gap-1">
+                    <h2 id="monthYearDisplay" class="text-lg font-bold text-gray-800">Bulan Tahun</h2>
+                    <span class="text-xs text-gray-400">▼</span>
+                </div>
+                <p class="text-[10px] text-gray-400" style="text-transform: uppercase; letter-spacing: -0.05em;">Ketuk untuk pilih tanggal</p>
+            </div>
+            <button onclick="nextMonth()" class="btn" style="background-color: #f3f4f6; color: #4b5563; border-radius: 9999px; padding: 0.5rem 0.75rem;">▶</button>
+        </div>
+
+        <!-- KALENDER GRID -->
+        <div class="flex-1 no-scrollbar" style="padding: 1rem 0.5rem; overflow-y: auto;">
+            <div class="grid calendar-layout gap-1 text-[10px] font-bold text-gray-400" style="margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                <div></div> <!-- Header kolom pekan kosong -->
+                <div class="text-red-500" style="display: flex; align-items: center; justify-content: center; text-align: center;">Min</div>
+                <div style="display: flex; align-items: center; justify-content: center; text-align: center;">Sen</div>
+                <div style="display: flex; align-items: center; justify-content: center; text-align: center;">Sel</div>
+                <div style="display: flex; align-items: center; justify-content: center; text-align: center;">Rab</div>
+                <div style="display: flex; align-items: center; justify-content: center; text-align: center;">Kam</div>
+                <div style="display: flex; align-items: center; justify-content: center; text-align: center;">Jum</div>
+                <div style="display: flex; align-items: center; justify-content: center; text-align: center;">Sab</div>
+            </div>
+            <div id="calendarGrid" class="grid calendar-layout gap-1 fade-in"></div>
+            
+            <!-- DAFTAR LIBUR BULANAN -->
+            <div id="monthlyHolidaySection" class="hidden" style="margin-top: 2rem; border-top: 1px solid #f3f4f6; padding-top: 1rem;">
+                <h3 class="text-[10px] font-bold text-gray-400" style="text-transform: uppercase; margin-bottom: 0.5rem;">Libur di Bulan Ini</h3>
+                <div id="monthlyHolidayList" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+            </div>
+        </div>
+
+        <!-- LEGENDA INFO -->
+        <div class="bg-gray-50 text-[10px]" style="padding: 1rem; border-top: 1px solid #e5e7eb; padding-bottom: 4rem;">
+            <div class="grid grid-cols-2 gap-3 font-semibold text-gray-600">
+                <div class="flex items-center gap-2"><div style="width: 0.75rem; height: 0.75rem; border-radius: 0.25rem; background-color: #3b82f6;"></div> Shift 1 (00:00 - 07:30)</div>
+                <div class="flex items-center gap-2"><div style="width: 0.75rem; height: 0.75rem; border-radius: 0.25rem; background-color: #f97316;"></div> Shift 2 (07:30 - 16:00)</div>
+                <div class="flex items-center gap-2"><div style="width: 0.75rem; height: 0.75rem; border-radius: 0.25rem; background-color: #6366f1;"></div> Shift 3 (16:00 - 00:00)</div>
+                <div class="flex items-center gap-2"><div style="width: 0.75rem; height: 0.75rem; border-radius: 0.25rem; background-color: #ef4444;"></div> H (Libur / Off)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DETAIL TANGGAL -->
+    <div id="detailModal" class="fixed inset-0 modal-bg hidden flex items-center justify-center z-50" style="padding: 1rem;">
+        <div class="bg-white" style="border-radius: 1rem; width: 100%; max-width: 24rem; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+            <div id="detailHeader" style="padding: 1.5rem; color: white; position: relative; background-color: #1e40af;">
+                <button onclick="closeDetail()" style="position: absolute; top: 1rem; right: 1rem; background: rgba(0,0,0,0.2); border: none; color: white; border-radius: 9999px; width: 2rem; height: 2rem; font-weight: bold; cursor: pointer;">✕</button>
+                <div id="detailDateLabel" class="text-sm font-semibold" style="opacity: 0.8; text-transform: uppercase; letter-spacing: 0.1em;">Senin, 1 Januari 2026</div>
+                <h3 id="detailHolidayTitle" class="text-xl font-bold" style="margin-top: 0.25rem;">Hari Kerja Normal</h3>
+            </div>
+            <div style="padding: 1.5rem;">
+                <h4 class="text-xs font-bold text-gray-400" style="text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; font-style: italic;">Status Shift Tim</h4>
+                <div id="detailShiftList" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+                <button onclick="closeDetail()" class="btn" style="margin-top: 2rem; width: 100%; background-color: #f3f4f6; color: #374151; padding: 0.75rem; font-size: 0.875rem;">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PEMILIH BULAN/TAHUN -->
+    <div id="pickerModal" class="fixed inset-0 modal-bg hidden flex items-center justify-center z-50" style="padding: 1rem;">
+        <div class="bg-white" style="border-radius: 1rem; width: 100%; max-width: 18rem; padding: 1.5rem;">
+            <h3 class="font-bold text-center" style="margin-bottom: 1rem; color: #1e3a8a;">Pilih Bulan & Tahun</h3>
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label class="text-[10px] font-bold text-gray-400" style="text-transform: uppercase;">Bulan</label>
+                    <select id="selectMonth" style="width: 100%; border: 1px solid #e5e7eb; padding: 0.5rem; border-radius: 0.5rem; font-size: 0.875rem; outline: none; margin-top: 0.25rem;"></select>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-gray-400" style="text-transform: uppercase;">Tahun</label>
+                    <input type="number" id="inputYear" style="width: 100%; border: 1px solid #e5e7eb; padding: 0.5rem; border-radius: 0.5rem; font-size: 0.875rem; outline: none; margin-top: 0.25rem;">
+                </div>
+                <div style="display: flex; gap: 0.5rem; padding-top: 0.5rem;">
+                    <button onclick="toggleMonthPicker()" class="btn" style="flex: 1; background-color: #f3f4f6; color: #6b7280;">Batal</button>
+                    <button onclick="applyPicker()" class="btn" style="flex: 1; background-color: #2563eb; color: white;">Terapkan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loadingOverlay" class="fixed inset-0 hidden flex-col items-center justify-center z-100" style="background-color: rgba(255,255,255,0.85); backdrop-filter: blur(4px);">
+        <div class="spinner"></div>
+        <p class="font-bold text-sm" style="color: #1e3a8a; margin-top: 1rem;">Menyinkronkan Data...</p>
+    </div>
+
+    <script>
+        // SPREADSHEET URL
+        const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS8hYExc3sMn6sH_fbYVKzuCP-CEBMoYGV5aWmvLZktR_SbAzLenOoK3_w92euP1Af8TKsA1IPWstAA/pub?gid=0&single=true&output=csv"; 
+        
+        let localHolidays = JSON.parse(localStorage.getItem('inalumHolidays')) || {
+            "2026-01-01": "Tahun Baru Masehi", "2026-05-01": "Hari Buruh", "2026-12-25": "Hari Raya Natal"
+        };
+
+        async function syncHolidays(isManual = false) {
+            if(!SPREADSHEET_CSV_URL || SPREADSHEET_CSV_URL.trim() === "") return;
+            
+            if(isManual) document.getElementById('loadingOverlay').classList.remove('hidden');
+
+            try {
+                let response;
+                try {
+                    response = await fetch(SPREADSHEET_CSV_URL);
+                    if (!response.ok) throw new Error("Gagal mengambil data");
+                } catch (err) {
+                    const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(SPREADSHEET_CSV_URL);
+                    response = await fetch(proxyUrl);
+                    if (!response.ok) throw new Error("Gagal mengambil data dari proxy");
+                }
+                
+                const data = await response.text();
+                const rows = data.split('\n');
+                let newHolidays = {};
+                
+                for(let i = 1; i < rows.length; i++) {
+                    const row = rows[i].trim();
+                    if(!row) continue;
+                    
+                    const firstComma = row.indexOf(',');
+                    if(firstComma > -1) {
+                        const dateStr = row.substring(0, firstComma).trim();
+                        let nameStr = row.substring(firstComma + 1).trim();
+                        nameStr = nameStr.replace(/^"|"$/g, '');
+                        if(dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                            newHolidays[dateStr] = nameStr;
+                        }
+                    }
+                }
+                
+                if(Object.keys(newHolidays).length > 0) {
+                    localHolidays = newHolidays;
+                    localStorage.setItem('inalumHolidays', JSON.stringify(localHolidays));
+                    renderCalendar();
+                    if(isManual) alert("Sukses! Data libur berhasil diperbarui.");
+                } else {
+                    if(isManual) alert("Data ditemukan, tapi format tanggal salah.");
+                }
+            } catch (error) {
+                console.error("Sync Error:", error);
+                if(isManual) alert("Gagal menyinkronkan data. Pastikan ada koneksi internet.");
+            } finally {
+                if(isManual) document.getElementById('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        const shiftCycle = [
+            { S1: 'B', S2: 'C', S3: 'A', H: 'D' },
+            { S1: 'D', S2: 'B', S3: 'A', H: 'C' },
+            { S1: 'D', S2: 'B', S3: 'A', H: 'C' },
+            { S1: 'D', S2: 'B', S3: 'C', H: 'A' },
+            { S1: 'A', S2: 'D', S3: 'C', H: 'B' },
+            { S1: 'A', S2: 'D', S3: 'C', H: 'B' },
+            { S1: 'A', S2: 'D', S3: 'B', H: 'C' },
+            { S1: 'C', S2: 'A', S3: 'B', H: 'D' },
+            { S1: 'C', S2: 'A', S3: 'B', H: 'D' },
+            { S1: 'C', S2: 'A', S3: 'D', H: 'B' },
+            { S1: 'B', S2: 'C', S3: 'D', H: 'A' },
+            { S1: 'B', S2: 'C', S3: 'D', H: 'A' }
+        ];
+
+        const BASE_DATE = new Date(2026, 0, 1); 
+        const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+        
+        let currentDate = new Date();
+        let selectedTeam = 'ALL';
+
+        function getWeekNumber(d) {
+            const year = d.getFullYear();
+            const jan1 = new Date(year, 0, 1);
+            const jan1Sunday = new Date(jan1);
+            jan1Sunday.setDate(jan1.getDate() - jan1.getDay());
+            
+            const dSunday = new Date(d);
+            dSunday.setDate(d.getDate() - d.getDay());
+            
+            const diffDays = Math.round((dSunday - jan1Sunday) / 86400000);
+            let weekNo = Math.floor(diffDays / 7) + 1;
+            
+            if (weekNo < 1) {
+                const prevJan1 = new Date(year - 1, 0, 1);
+                const prevJan1Sunday = new Date(prevJan1);
+                prevJan1Sunday.setDate(prevJan1.getDate() - prevJan1.getDay());
+                const diffPrev = Math.round((dSunday - prevJan1Sunday) / 86400000);
+                weekNo = Math.floor(diffPrev / 7) + 1;
+            }
+            return weekNo;
+        }
+
+        function getShiftDataOnly(date) {
+            const diff = Math.floor((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(BASE_DATE.getFullYear(), BASE_DATE.getMonth(), BASE_DATE.getDate())) / 86400000);
+            let idx = diff % 12;
+            if (idx < 0) idx += 12;
+            return shiftCycle[idx];
+        }
+
+        function getShiftSequence(date, team, shiftType) {
+            let count = 1;
+            let checkDate = new Date(date);
+            for (let i = 1; i < 4; i++) {
+                checkDate.setDate(checkDate.getDate() - 1);
+                const data = getShiftDataOnly(checkDate);
+                let match = false;
+                if(shiftType === 1 && data.S1 === team) match = true;
+                if(shiftType === 2 && data.S2 === team) match = true;
+                if(shiftType === 3 && data.S3 === team) match = true;
+                if(shiftType === 'H' && data.H === team) match = true;
+                if(match) count++; else break;
+            }
+            return count;
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '';
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            document.getElementById('monthYearDisplay').textContent = `${monthNames[month]} ${year}`;
+            
+            const firstDay = new Date(year, month, 1).getDay(); 
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = new Date();
+            const isCurrentMonth = (year === today.getFullYear() && month === today.getMonth());
+
+            const holSec = document.getElementById('monthlyHolidaySection');
+            const holList = document.getElementById('monthlyHolidayList');
+            holList.innerHTML = '';
+            let monthHolidaysFound = false;
+
+            let slots = [];
+            for (let i = 0; i < firstDay; i++) {
+                slots.push(null);
+            }
+            for (let day = 1; day <= daysInMonth; day++) {
+                slots.push(new Date(year, month, day));
+            }
+            while (slots.length % 7 !== 0) {
+                slots.push(null);
+            }
+
+            for (let i = 0; i < slots.length; i += 7) {
+                let weekChunk = slots.slice(i, i + 7);
+                let validDate = weekChunk.find(d => d !== null);
+                let weekNum = validDate ? getWeekNumber(validDate) : '';
+
+                // Kolom pekan dipas-pas-an angkanya tanpa huruf W
+                grid.innerHTML += `<div style="display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; color: #9ca3af; background-color: #f9fafb; border: 1px solid #f3f4f6; border-radius: 0.5rem; min-height: 5.8rem;">${weekNum}</div>`;
+
+                weekChunk.forEach(dateObj => {
+                    if (!dateObj) {
+                        grid.innerHTML += `<div style="background-color: transparent; min-height: 5.8rem;"></div>`;
+                    } else {
+                        const day = dateObj.getDate();
+                        const shiftData = getShiftDataOnly(dateObj);
+                        const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const holidayName = localHolidays[dateString];
+                        const isToday = isCurrentMonth && day === today.getDate();
+                        const isSunday = dateObj.getDay() === 0;
+                        const isHoliday = isSunday || holidayName;
+
+                        if (holidayName) {
+                            monthHolidaysFound = true;
+                            holList.innerHTML += `
+                                <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem; background-color: #fef2f2; border-radius: 0.5rem; border: 1px solid #fee2e2;">
+                                    <span style="background-color: #ef4444; color: white; font-weight: bold; font-size: 10px; padding: 0.25rem 0.5rem; border-radius: 0.375rem;">${day}</span>
+                                    <span style="font-size: 0.75rem; font-weight: 600; color: #b91c1c;">${holidayName}</span>
+                                </div>
+                            `;
+                        }
+
+                        let cellHtml = `<div onclick="showDetail(${year}, ${month}, ${day})" style="min-height: 5.8rem; padding: 0.25rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; display: flex; flex-direction: column; align-items: center; position: relative; cursor: pointer; ${isHoliday ? 'background-color: rgba(254, 242, 242, 0.5);' : 'background-color: #ffffff;'} ${isToday ? 'box-shadow: 0 0 0 2px #3b82f6;' : 'box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);'}">`;
+                        
+                        cellHtml += `
+                            <div style="width: 100%; display: flex; flex-direction: column; align-items: center; margin-bottom: 0.25rem;">
+                                <span style="font-size: 0.75rem; font-weight: bold; ${isHoliday ? 'color: #dc2626;' : 'color: #374151;'} ${isToday ? 'background-color: #2563eb; color: white; width: 1.25rem; height: 1.25rem; border-radius: 9999px; display: flex; align-items: center; justify-content: center;' : ''}">${day}</span>
+                                ${holidayName ? `<span style="font-size: 7px; color: #dc2626; font-weight: bold; line-height: 1; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${holidayName.split(' ')[0]}</span>` : ''}
+                            </div>
+                        `;
+
+                        if (selectedTeam === 'ALL') {
+                            cellHtml += `
+                                <div style="width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: auto; font-size: 8px; font-weight: bold;">
+                                    <div class="bg-blue-100 text-blue-700" style="text-align: center; border-radius: 2px; padding: 2px 0;">A:${shiftData.S1 === 'A' ? 1 : shiftData.S2 === 'A' ? 2 : shiftData.S3 === 'A' ? 3 : 'H'}</div>
+                                    <div class="bg-orange-100 text-orange-700" style="text-align: center; border-radius: 2px; padding: 2px 0;">B:${shiftData.S1 === 'B' ? 1 : shiftData.S2 === 'B' ? 2 : shiftData.S3 === 'B' ? 3 : 'H'}</div>
+                                    <div class="bg-indigo-100 text-indigo-700" style="text-align: center; border-radius: 2px; padding: 2px 0;">C:${shiftData.S1 === 'C' ? 1 : shiftData.S2 === 'C' ? 2 : shiftData.S3 === 'C' ? 3 : 'H'}</div>
+                                    <div class="bg-red-100 text-red-700" style="text-align: center; border-radius: 2px; padding: 2px 0;">D:${shiftData.S1 === 'D' ? 1 : shiftData.S2 === 'D' ? 2 : shiftData.S3 === 'D' ? 3 : 'H'}</div>
+                                </div>
+                            `;
+                        } else {
+                            let sName = '', sColor = '';
+                            if (shiftData.S1 === selectedTeam) { sName = 'Shift 1'; sColor = 'background-color: #3b82f6; color: white;'; }
+                            else if (shiftData.S2 === selectedTeam) { sName = 'Shift 2'; sColor = 'background-color: #f97316; color: white;'; }
+                            else if (shiftData.H === selectedTeam) { sName = 'OFF'; sColor = 'background-color: #ef4444; color: white;'; }
+                            else if (shiftData.S3 === selectedTeam) { sName = 'Shift 3'; sColor = 'background-color: #6366f1; color: white;'; }
+
+                            cellHtml += `
+                                <div style="margin-top: auto; width: 100%;">
+                                    <div style="width: 100%; font-size: 10px; font-weight: bold; text-align: center; padding: 0.5rem 0; border-radius: 0.5rem; ${sColor}">
+                                        ${sName}
+                                    </div>
+                                </div>
+                            `;
+                        }
+
+                        cellHtml += `</div>`;
+                        grid.innerHTML += cellHtml;
+                    }
+                });
+            }
+
+            holSec.className = monthHolidaysFound ? "" : "hidden";
+        }
+
+        function showDetail(y, m, d) {
+            const dateObj = new Date(y, m, d);
+            const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const holiday = localHolidays[dateStr];
+            const data = getShiftDataOnly(dateObj);
+            
+            document.getElementById('detailDateLabel').textContent = `${dayNames[dateObj.getDay()]}, ${d} ${monthNames[m]} ${y}`;
+            const titleEl = document.getElementById('detailHolidayTitle');
+            const headerEl = document.getElementById('detailHeader');
+            
+            if (holiday) {
+                titleEl.textContent = holiday;
+                headerEl.style.backgroundColor = "#dc2626";
+            } else if (dateObj.getDay() === 0) {
+                titleEl.textContent = "Hari Minggu";
+                headerEl.style.backgroundColor = "#ef4444";
+            } else {
+                titleEl.textContent = "Hari Kerja Normal";
+                headerEl.style.backgroundColor = "#1e40af";
+            }
+
+            const list = document.getElementById('detailShiftList');
+            list.innerHTML = '';
+            
+            ['A', 'B', 'C', 'D'].forEach(t => {
+                let sName = '', sColor = '', sIcon = '', sType = '';
+                if (data.S1 === t) { sName = 'Shift 1 (Pagi)'; sColor = 'color: #2563eb; background-color: #eff6ff; border-left: 4px solid #2563eb;'; sIcon = '00:00 - 07:30'; sType = 1; }
+                else if (data.S2 === t) { sName = 'Shift 2 (Siang)'; sColor = 'color: #ea580c; background-color: #fff7ed; border-left: 4px solid #ea580c;'; sIcon = '07:30 - 16:00'; sType = 2; }
+                else if (data.S3 === t) { sName = 'Shift 3 (Malam)'; sColor = 'color: #4f46e5; background-color: #eef2ff; border-left: 4px solid #4f46e5;'; sIcon = '16:00 - 00:00'; sType = 3; }
+                else { sName = 'Libur (OFF)'; sColor = 'color: #dc2626; background-color: #fef2f2; border-left: 4px solid #dc2626;'; sIcon = 'Bebas Tugas'; sType = 'H'; }
+                
+                const seq = getShiftSequence(dateObj, t, sType);
+
+                list.innerHTML += `
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-radius: 1rem; ${sColor} box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);">
+                        <div>
+                            <div style="font-size: 10px; font-weight: bold; opacity: 0.6; text-transform: uppercase;">TIM ${t}</div>
+                            <div style="font-weight: bold; font-size: 0.875rem;">${sName} <span style="font-size: 10px; margin-left: 0.25rem; background-color: rgba(255,255,255,0.6); padding: 0.125rem 0.375rem; border-radius: 0.25rem;">Ke-${seq}</span></div>
+                        </div>
+                        <div style="font-size: 10px; font-family: monospace; font-weight: bold; opacity: 0.7;">${sIcon}</div>
+                    </div>
+                `;
+            });
+
+            const modal = document.getElementById('detailModal');
+            modal.classList.remove('hidden');
+        }
+
+        function closeDetail() { document.getElementById('detailModal').classList.add('hidden'); }
+        
+        function toggleMonthPicker() {
+            const modal = document.getElementById('pickerModal');
+            if (modal.classList.contains('hidden')) {
+                const sMonth = document.getElementById('selectMonth');
+                sMonth.innerHTML = monthNames.map((m, i) => `<option value="${i}" ${i === currentDate.getMonth() ? 'selected' : ''}>${m}</option>`).join('');
+                document.getElementById('inputYear').value = currentDate.getFullYear();
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function applyPicker() {
+            currentDate.setMonth(parseInt(document.getElementById('selectMonth').value));
+            currentDate.setFullYear(parseInt(document.getElementById('inputYear').value));
+            toggleMonthPicker();
+            renderCalendar();
+        }
+
+        function goToToday() { currentDate = new Date(); renderCalendar(); }
+        function prevMonth() { currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar(); }
+        function nextMonth() { currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar(); }
+        
+        function selectTeam(team) {
+            selectedTeam = team;
+            document.querySelectorAll('.team-btn').forEach(btn => {
+                btn.className = "team-btn team-btn-inactive";
+            });
+            document.getElementById('btn-' + team).className = "team-btn team-btn-active";
+            renderCalendar();
+        }
+
+        window.onload = () => {
+            renderCalendar();
+            // Jalankan sync tanpa notif eror jika offline
+            syncHolidays(false); 
+        };
+    </script>
+</body>
+</html>
